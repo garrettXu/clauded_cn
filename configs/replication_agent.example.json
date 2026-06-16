@@ -1,0 +1,102 @@
+{
+  "site_id": "example",
+  "target_url": "https://www.example.com/",
+  "out_dir": "mirror",
+  "force_refresh": false,
+  "domain_policy": {
+    "root_domain": "example.com",
+    "include_subdomains": true,
+    "include": [
+      "www.example.com",
+      "docs.example.com"
+    ],
+    "exclude": [
+      "status.example.com"
+    ]
+  },
+  "crawl_policy": {
+    "respect_robots": true,
+    "max_pages_per_host": 100,
+    "max_depth": 20,
+    "rate_limit_per_host": 0.5,
+    "render_dynamic_pages": true,
+    "require_browser_render": false,
+    "dynamic_wait_ms": 1500,
+    "dynamic_scroll_rounds": 4,
+    "dynamic_click_rounds": 2,
+    "dynamic_click_limit": 20,
+    "dynamic_timeout_seconds": 30,
+    "download_videos": true,
+    "download_documents": true,
+    "max_asset_size_mb": 200,
+    "max_assets_per_host": 0,
+    "timeout_seconds": 30,
+    "revalidate_completed_on_resume": true,
+    "retry_failed_on_resume": true,
+    "terminal_http_statuses": [
+      404,
+      410
+    ],
+    "max_attempts_per_page": 3,
+    "worker_count": 4
+  },
+  "static_policy": {
+    "runtime_database": false,
+    "preserve_paths": true,
+    "query_strategy": "record_and_map_when_needed",
+    "external_link_policy": "keep_original"
+  },
+  "local_preview": {
+    "port_start": 8300,
+    "host_port_map": {
+      "www.example.com": 8300,
+      "docs.example.com": 8301
+    }
+  },
+  "deployment": {
+    "generate_nginx": true,
+    "base_root": "/srv/mirror/original",
+    "scheme": "https",
+    "target_base_domain": "mirror.example.net",
+    "inject_runtime_link_rewriter": true,
+    "target_host_map": {
+      "www.example.com": "www.mirror.example.net",
+      "docs.example.com": "docs.mirror.example.net"
+    }
+  },
+  "visual_policy": {
+    "enabled": true,
+    "sample_pages": 20,
+    "diff_threshold": 0.02,
+    "full_page": true,
+    "wait_ms": 1000,
+    "use_vision_model": false,
+    "vision_api_url": "https://ark.cn-beijing.volces.com/api/v3",
+    "vision_api_key_env": "VISION_API_KEY",
+    "vision_model": "doubao-seed-1-6-flash-250828",
+    "viewports": [
+      {
+        "name": "desktop",
+        "width": 1365,
+        "height": 900
+      },
+      {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      }
+    ]
+  },
+  "quality_policy": {
+    "min_page_success_rate": 0.95,
+    "min_resource_success_rate": 0.98,
+    "max_unresolved_internal_links": 0,
+    "max_residual_resources": 0,
+    "require_visual_pass": false
+  },
+  "authorization_policy": {
+    "require_ack": true,
+    "authorized": false,
+    "statement": "Only run this agent for websites you own or are explicitly authorized to mirror."
+  }
+}
