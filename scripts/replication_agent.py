@@ -390,7 +390,7 @@ class ReplicationAgent:
 
             if self.config.crawl_policy.revalidate_completed_on_resume:
                 self.check_previous_resources()
-            self.sync_shared_external_assets()
+            self.repair_missing_local_static_refs()
             self.verify_internal_link_completeness()
             self.verify_static_resource_localization()
             self.write_manifests()
@@ -1038,18 +1038,13 @@ class ReplicationAgent:
     if (!root.querySelectorAll) return;
     root.querySelectorAll("img,source,video,audio,track,iframe,link").forEach(rewriteElement);
   }}
-  rewriteAll(document.documentElement);
-  new MutationObserver(function(mutations) {{
-    mutations.forEach(function(mutation) {{
-      if (mutation.type === "attributes") rewriteElement(mutation.target);
-      mutation.addedNodes && mutation.addedNodes.forEach(rewriteAll);
-    }});
-  }}).observe(document.documentElement, {{
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["src", "srcset", "poster", "href", "imagesrcset"]
-  }});
+  function scheduleRewrite() {{
+    var run = function() {{ rewriteAll(document.documentElement); }};
+    if ("requestIdleCallback" in window) window.requestIdleCallback(run, {{timeout: 1500}});
+    else if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, {{once: true}});
+    else setTimeout(run, 0);
+  }}
+  scheduleRewrite();
 }})();
 """
         target = soup.head or soup.body or soup
@@ -1399,35 +1394,42 @@ class ReplicationAgent:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(body)
 
-    def sync_shared_external_assets(self) -> None:
-        """Make root-relative external asset paths resolvable on every mirrored host."""
-        hosts = sorted(self.hosts)
-        if len(hosts) <= 1:
-            return
+    def repair_missing_local_static_refs(self) -> None:
+        """Copy only static files that a final HTML page references but its host lacks."""
         copied = 0
-        for variant in ("site", "local_preview"):
-            sources: list[Path] = []
-            for host in hosts:
-                source = self.host_root(host, variant) / "__external_assets"
-                if source.exists():
-                    sources.append(source)
-            if not sources:
+        for item in sorted(self.crawl_table.values(), key=lambda entry: (entry.host, entry.url)):
+            if item.status not in PAGE_REUSABLE_STATUSES:
                 continue
-            for host in hosts:
-                target_root = self.host_root(host, variant) / "__external_assets"
-                for source_root in sources:
-                    for source_file in source_root.rglob("*"):
-                        if not source_file.is_file():
-                            continue
-                        relative = source_file.relative_to(source_root)
-                        target_file = target_root / relative
-                        if target_file.exists():
-                            continue
-                        target_file.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(source_file, target_file)
-                        copied += 1
+            for variant, relative_path in (("site", item.deploy_path), ("local_preview", item.local_preview_path)):
+                if not relative_path:
+                    continue
+                page_path = self.original_dir / relative_path
+                if not page_path.exists():
+                    continue
+                host_root = self.host_root(item.host, variant)
+                for ref in self.local_static_refs_in_html(page_path):
+                    parsed = urllib.parse.urlparse(ref)
+                    target = host_root / parsed.path.lstrip("/")
+                    if target.exists():
+                        continue
+                    source = self.find_existing_static_file(parsed.path, variant, exclude_host=item.host)
+                    if not source:
+                        continue
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, target)
+                    copied += 1
         if copied:
-            self.asset_records.append({"status": "shared_external_assets_synced", "copied": copied})
+            self.asset_records.append({"status": "missing_local_static_refs_repaired", "copied": copied})
+
+    def find_existing_static_file(self, public_path: str, variant: str, exclude_host: str | None = None) -> Path | None:
+        relative = public_path.lstrip("/")
+        for host in sorted(self.hosts):
+            if exclude_host and host == exclude_host:
+                continue
+            candidate = self.host_root(host, variant) / relative
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        return None
 
     def write_page_variants(self, url: str, deploy_soup: BeautifulSoup) -> None:
         local_soup = BeautifulSoup(str(deploy_soup), "html5lib")
@@ -1707,13 +1709,13 @@ class ReplicationAgent:
         if self._browser:
             try:
                 self._browser.close()
-            except Exception:
+            except BaseException:
                 pass
             self._browser = None
         if self._playwright:
             try:
                 self._playwright.stop()
-            except Exception:
+            except BaseException:
                 pass
             self._playwright = None
 
@@ -2141,27 +2143,38 @@ class ReplicationAgent:
         return urllib.parse.urlunparse(("http", f"127.0.0.1:{port}", parsed.path or "/", "", parsed.query, parsed.fragment))
 
     def capture_url_screenshot(self, url: str, path: Path, viewport: Viewport) -> bool:
+        context: Any = None
         try:
             browser = self.browser()
+            screenshot_timeout = max(3000, min(10000, self.config.crawl_policy.dynamic_timeout_seconds * 1000))
             context = browser.new_context(
                 viewport={"width": viewport.width, "height": viewport.height},
                 device_scale_factor=1,
                 user_agent=USER_AGENT,
             )
             page = context.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=self.config.crawl_policy.dynamic_timeout_seconds * 1000)
+            page.goto(url, wait_until="commit", timeout=screenshot_timeout)
             try:
-                page.wait_for_load_state("networkidle", timeout=self.config.crawl_policy.dynamic_network_idle_timeout_ms)
+                page.wait_for_load_state("domcontentloaded", timeout=screenshot_timeout)
+            except Exception:
+                pass
+            try:
+                page.wait_for_load_state("networkidle", timeout=min(3000, self.config.crawl_policy.dynamic_network_idle_timeout_ms))
             except Exception:
                 pass
             if self.config.visual_policy.wait_ms > 0:
                 page.wait_for_timeout(self.config.visual_policy.wait_ms)
-            page.screenshot(path=str(path), full_page=self.config.visual_policy.full_page)
-            context.close()
+            page.screenshot(path=str(path), full_page=self.config.visual_policy.full_page, timeout=screenshot_timeout)
             return True
         except Exception as exc:
             self.errors.append({"type": "visual_screenshot_failed", "url": url, "error": str(exc)})
             return False
+        finally:
+            if context:
+                try:
+                    context.close()
+                except BaseException:
+                    pass
 
     def call_vision_model(self, source_path: Path, local_path: Path, page_url: str) -> dict[str, Any]:
         policy = self.config.visual_policy
@@ -2317,20 +2330,7 @@ class ReplicationAgent:
             page_path = self.original_dir / item.deploy_path
             if not page_path.exists():
                 continue
-            soup = BeautifulSoup(page_path.read_text(encoding="utf-8", errors="ignore"), "html5lib")
-            refs: set[str] = set()
-            for tag in soup.find_all(True):
-                for attr in ("src", "href", "poster", "data-src"):
-                    value = tag.get(attr)
-                    if isinstance(value, str):
-                        refs.add(value)
-                for attr in ("srcset", "imagesrcset"):
-                    value = tag.get(attr)
-                    if isinstance(value, str):
-                        refs.update(part.strip().split()[0] for part in value.split(",") if part.strip())
-            for ref in sorted(refs):
-                if not self.is_local_static_ref(ref):
-                    continue
+            for ref in self.local_static_refs_in_html(page_path):
                 parsed = urllib.parse.urlparse(ref)
                 target = self.host_root(item.host, "site") / parsed.path.lstrip("/")
                 if not target.exists():
@@ -2342,6 +2342,20 @@ class ReplicationAgent:
                         }
                     )
         return issues
+
+    def local_static_refs_in_html(self, page_path: Path) -> set[str]:
+        soup = BeautifulSoup(page_path.read_text(encoding="utf-8", errors="ignore"), "html5lib")
+        refs: set[str] = set()
+        for tag in soup.find_all(True):
+            for attr in ("src", "href", "poster", "data-src"):
+                value = tag.get(attr)
+                if isinstance(value, str):
+                    refs.add(value)
+            for attr in ("srcset", "imagesrcset"):
+                value = tag.get(attr)
+                if isinstance(value, str):
+                    refs.update(part.strip().split()[0] for part in value.split(",") if part.strip())
+        return {ref for ref in refs if self.is_local_static_ref(ref)}
 
     def is_local_static_ref(self, ref: str) -> bool:
         if not ref or ref.startswith(("data:", "blob:", "#", "mailto:", "tel:", "javascript:", "//")):

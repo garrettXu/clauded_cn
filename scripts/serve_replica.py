@@ -33,16 +33,33 @@ def main() -> int:
         "replica_dir",
         nargs="?",
         default="output/replication_test/original",
-        help="Path to mirror/original.",
+        help="Path to mirror/original, or a single static site directory.",
     )
+    parser.add_argument("--port", type=int, help="Port for serving a single static site directory.")
+    parser.add_argument("--bind", default="127.0.0.1", help="Bind address for single-directory serving.")
     args = parser.parse_args()
 
     replica_dir = Path(args.replica_dir).resolve()
-    manifest = json.loads((replica_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest_path = replica_dir / "manifest.json"
+    if not manifest_path.exists():
+        port = args.port or 8700
+        handler = functools.partial(QuietHandler, directory=str(replica_dir))
+        with ReusableTCPServer((args.bind, port), handler) as server:
+            print(f"{replica_dir} -> http://{args.bind}:{port}")
+            try:
+                server.serve_forever()
+            except KeyboardInterrupt:
+                return 0
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    hosts = manifest.get("hosts", [])
+    if args.port and len(hosts) > 1:
+        raise SystemExit("--port can only override a manifest with one host; multi-host mirrors use manifest ports.")
 
     threads: list[threading.Thread] = []
-    for host in manifest.get("hosts", []):
-        port = int(host["local_port"])
+    for host in hosts:
+        port = int(args.port or host["local_port"])
         directory = replica_dir / host["local_preview_root"]
         if not directory.exists():
             continue
@@ -63,4 +80,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

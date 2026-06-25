@@ -72,7 +72,7 @@ class ReplicationAgentTests(unittest.TestCase):
         self.assertEqual(report["page_counts"]["pending"], 1)
         self.assertEqual(report["resource_counts"]["failed"], 1)
 
-    def test_shared_external_assets_are_synced_to_all_hosts(self) -> None:
+    def test_missing_local_static_refs_are_repaired_from_other_hosts(self) -> None:
         agent = make_agent()
         agent.ensure_host("www.example.com")
         agent.ensure_host("docs.example.com")
@@ -82,8 +82,21 @@ class ReplicationAgentTests(unittest.TestCase):
         preview_source = agent.host_root("www.example.com", "local_preview") / "__external_assets" / "cdn.example.com" / "app.css"
         preview_source.parent.mkdir(parents=True, exist_ok=True)
         preview_source.write_text("body{}", encoding="utf-8")
+        item = CrawlItem(
+            url="https://docs.example.com/",
+            host="docs.example.com",
+            depth=0,
+            status="replicated",
+            local_preview_path="hosts/docs.example.com/local_preview/index.html",
+            deploy_path="hosts/docs.example.com/site/index.html",
+        )
+        agent.crawl_table[item.url] = item
+        for relative in (item.local_preview_path, item.deploy_path):
+            page = agent.original_dir / relative
+            page.parent.mkdir(parents=True, exist_ok=True)
+            page.write_text('<html><head><link rel="stylesheet" href="/__external_assets/cdn.example.com/app.css"></head></html>', encoding="utf-8")
 
-        agent.sync_shared_external_assets()
+        agent.repair_missing_local_static_refs()
 
         self.assertTrue((agent.host_root("docs.example.com", "site") / "__external_assets" / "cdn.example.com" / "app.css").exists())
         self.assertTrue(
