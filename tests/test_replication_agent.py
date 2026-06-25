@@ -72,6 +72,44 @@ class ReplicationAgentTests(unittest.TestCase):
         self.assertEqual(report["page_counts"]["pending"], 1)
         self.assertEqual(report["resource_counts"]["failed"], 1)
 
+    def test_shared_external_assets_are_synced_to_all_hosts(self) -> None:
+        agent = make_agent()
+        agent.ensure_host("www.example.com")
+        agent.ensure_host("docs.example.com")
+        source = agent.host_root("www.example.com", "site") / "__external_assets" / "cdn.example.com" / "app.css"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("body{}", encoding="utf-8")
+        preview_source = agent.host_root("www.example.com", "local_preview") / "__external_assets" / "cdn.example.com" / "app.css"
+        preview_source.parent.mkdir(parents=True, exist_ok=True)
+        preview_source.write_text("body{}", encoding="utf-8")
+
+        agent.sync_shared_external_assets()
+
+        self.assertTrue((agent.host_root("docs.example.com", "site") / "__external_assets" / "cdn.example.com" / "app.css").exists())
+        self.assertTrue(
+            (agent.host_root("docs.example.com", "local_preview") / "__external_assets" / "cdn.example.com" / "app.css").exists()
+        )
+
+    def test_verify_static_resource_localization_flags_html_missing_ref(self) -> None:
+        agent = make_agent()
+        agent.ensure_host("www.example.com")
+        item = CrawlItem(
+            url="https://www.example.com/",
+            host="www.example.com",
+            depth=0,
+            status="replicated",
+            deploy_path="hosts/www.example.com/site/index.html",
+        )
+        agent.crawl_table[item.url] = item
+        page = agent.original_dir / item.deploy_path
+        page.parent.mkdir(parents=True, exist_ok=True)
+        page.write_text('<html><head><link rel="stylesheet" href="/missing.css"></head></html>', encoding="utf-8")
+
+        issues = agent.find_missing_local_static_refs()
+
+        self.assertEqual(issues[0]["ref"], "/missing.css")
+        self.assertEqual(issues[0]["reason"], "html_local_static_ref_missing")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -390,6 +390,7 @@ class ReplicationAgent:
 
             if self.config.crawl_policy.revalidate_completed_on_resume:
                 self.check_previous_resources()
+            self.sync_shared_external_assets()
             self.verify_internal_link_completeness()
             self.verify_static_resource_localization()
             self.write_manifests()
@@ -949,23 +950,27 @@ class ReplicationAgent:
     if (element.hasAttribute("href")) element.setAttribute("href", rewriteUrl(element.getAttribute("href")));
     if (element.hasAttribute("action")) element.setAttribute("action", rewriteUrl(element.getAttribute("action")));
   }}
-  function rewriteAll(root) {{
-    rewriteElement(root);
-    if (!root.querySelectorAll) return;
-    root.querySelectorAll("a[href],area[href],form[action]").forEach(rewriteElement);
+  function closestLink(element) {{
+    while (element && element.nodeType === 1) {{
+      if ((element.tagName === "A" || element.tagName === "AREA") && element.hasAttribute("href")) return element;
+      element = element.parentElement;
+    }}
+    return null;
   }}
-  rewriteAll(document.documentElement);
-  new MutationObserver(function(mutations) {{
-    mutations.forEach(function(mutation) {{
-      if (mutation.type === "attributes") rewriteElement(mutation.target);
-      mutation.addedNodes && mutation.addedNodes.forEach(rewriteAll);
-    }});
-  }}).observe(document.documentElement, {{
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["href", "action"]
-  }});
+  document.addEventListener("click", function(event) {{
+    var link = closestLink(event.target);
+    if (!link) return;
+    var original = link.getAttribute("href");
+    var rewritten = rewriteUrl(original);
+    if (!rewritten || rewritten === original) return;
+    event.preventDefault();
+    window.location.href = rewritten;
+  }}, true);
+  document.addEventListener("submit", function(event) {{
+    var form = event.target;
+    if (!form || !form.hasAttribute || !form.hasAttribute("action")) return;
+    rewriteElement(form);
+  }}, true);
 }})();
 """
         target = soup.head or soup.body or soup
@@ -1393,6 +1398,36 @@ class ReplicationAgent:
             path = self.host_root(host, variant) / public_path.lstrip("/")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(body)
+
+    def sync_shared_external_assets(self) -> None:
+        """Make root-relative external asset paths resolvable on every mirrored host."""
+        hosts = sorted(self.hosts)
+        if len(hosts) <= 1:
+            return
+        copied = 0
+        for variant in ("site", "local_preview"):
+            sources: list[Path] = []
+            for host in hosts:
+                source = self.host_root(host, variant) / "__external_assets"
+                if source.exists():
+                    sources.append(source)
+            if not sources:
+                continue
+            for host in hosts:
+                target_root = self.host_root(host, variant) / "__external_assets"
+                for source_root in sources:
+                    for source_file in source_root.rglob("*"):
+                        if not source_file.is_file():
+                            continue
+                        relative = source_file.relative_to(source_root)
+                        target_file = target_root / relative
+                        if target_file.exists():
+                            continue
+                        target_file.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(source_file, target_file)
+                        copied += 1
+        if copied:
+            self.asset_records.append({"status": "shared_external_assets_synced", "copied": copied})
 
     def write_page_variants(self, url: str, deploy_soup: BeautifulSoup) -> None:
         local_soup = BeautifulSoup(str(deploy_soup), "html5lib")
@@ -2271,7 +2306,50 @@ class ReplicationAgent:
                     "reason": item.status or "resource_not_saved",
                 }
             )
+        residual.extend(self.find_missing_local_static_refs())
         self.residual_static_refs = dedupe_issue_list(residual)
+
+    def find_missing_local_static_refs(self) -> list[dict[str, str]]:
+        issues: list[dict[str, str]] = []
+        for item in sorted(self.crawl_table.values(), key=lambda entry: (entry.host, entry.url)):
+            if item.status not in PAGE_REUSABLE_STATUSES or not item.deploy_path:
+                continue
+            page_path = self.original_dir / item.deploy_path
+            if not page_path.exists():
+                continue
+            soup = BeautifulSoup(page_path.read_text(encoding="utf-8", errors="ignore"), "html5lib")
+            refs: set[str] = set()
+            for tag in soup.find_all(True):
+                for attr in ("src", "href", "poster", "data-src"):
+                    value = tag.get(attr)
+                    if isinstance(value, str):
+                        refs.add(value)
+                for attr in ("srcset", "imagesrcset"):
+                    value = tag.get(attr)
+                    if isinstance(value, str):
+                        refs.update(part.strip().split()[0] for part in value.split(",") if part.strip())
+            for ref in sorted(refs):
+                if not self.is_local_static_ref(ref):
+                    continue
+                parsed = urllib.parse.urlparse(ref)
+                target = self.host_root(item.host, "site") / parsed.path.lstrip("/")
+                if not target.exists():
+                    issues.append(
+                        {
+                            "file": str(page_path.relative_to(self.original_dir)),
+                            "ref": ref,
+                            "reason": "html_local_static_ref_missing",
+                        }
+                    )
+        return issues
+
+    def is_local_static_ref(self, ref: str) -> bool:
+        if not ref or ref.startswith(("data:", "blob:", "#", "mailto:", "tel:", "javascript:", "//")):
+            return False
+        parsed = urllib.parse.urlparse(ref)
+        if parsed.scheme or parsed.netloc or not parsed.path.startswith("/"):
+            return False
+        return Path(parsed.path).suffix.lower() in STATIC_RESOURCE_EXTENSIONS
 
     def flush_progress_tables(self, force: bool = False) -> None:
         now = time.time()
