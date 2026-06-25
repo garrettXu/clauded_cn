@@ -159,7 +159,31 @@ python3 -m json.tool output/my_site/original/quality_report.json | sed -n '1,160
 
 ## 本地预览
 
-预览单个 host：
+没有域名时，推荐使用单端口 localhost 聚合预览：
+
+```bash
+.venv/bin/python scripts/serve_replica.py \
+  output/my_site/original \
+  --localhost \
+  --port 8700
+```
+
+浏览器打开：
+
+```text
+http://localhost:8700/
+```
+
+这个模式会把所有源 host 挂到同一个 localhost 端口下：
+
+```text
+http://localhost:8700/_mirror/www.example.com/
+http://localhost:8700/_mirror/docs.example.com/
+```
+
+页面里的内部链接、图片、CSS、JS 等根路径资源会在响应时自动改写到 `/_mirror/<source-host>/...`，所以不需要本地域名、hosts 文件或 Nginx。
+
+也可以预览单个 host：
 
 ```bash
 .venv/bin/python scripts/serve_replica.py \
@@ -173,7 +197,13 @@ python3 -m json.tool output/my_site/original/quality_report.json | sed -n '1,160
 http://localhost:8700/
 ```
 
-多 host 复刻时，按 `manifest.json` 或 `nginx/local-preview.conf` 中的端口分别查看。
+如果要使用原来的多端口预览，直接传入完整复刻目录，不加 `--localhost`：
+
+```bash
+.venv/bin/python scripts/serve_replica.py output/my_site/original
+```
+
+多端口模式下，每个源 host 使用 `manifest.json` 或 `nginx/local-preview.conf` 中分配的端口分别查看。
 
 ## 部署
 
