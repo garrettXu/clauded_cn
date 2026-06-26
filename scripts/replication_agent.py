@@ -829,6 +829,8 @@ class ReplicationAgent:
                 self.link_records.append({"from": page_url, "to": absolute, "type": "internal"})
                 if depth + 1 <= self.config.crawl_policy.max_depth and is_probable_page_url(absolute):
                     self.enqueue_page(absolute, depth + 1, discovered_from=page_url)
+                elif is_static_resource_url(absolute):
+                    self.download_asset_ref(absolute, page_url)
                 tag["data-replication-original-href"] = original_href
                 tag["data-replication-local-href"] = self.public_url(absolute, mode="local")
                 tag["data-replication-deploy-href"] = self.public_url(absolute, mode="deploy")

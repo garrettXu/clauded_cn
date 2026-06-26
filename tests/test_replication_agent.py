@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from bs4 import BeautifulSoup
+
 from scripts.replication_agent import (
     CrawlPolicy,
     CrawlItem,
@@ -189,6 +191,17 @@ class ReplicationAgentTests(unittest.TestCase):
 
         self.assertEqual(issues[0]["ref"], "/missing.css")
         self.assertEqual(issues[0]["reason"], "html_local_static_ref_missing")
+
+    def test_internal_pdf_links_are_downloaded_as_assets(self) -> None:
+        agent = make_agent()
+        calls: list[tuple[str, str]] = []
+        agent.download_asset_ref = lambda asset_url, page_url: calls.append((asset_url, page_url)) or "/doc.pdf"  # type: ignore[method-assign]
+        soup = BeautifulSoup('<a href="https://www.example.com/doc.pdf">PDF</a>', "html.parser")
+
+        result = agent.collect_and_rewrite_links(soup, "https://www.example.com/", 0)
+
+        self.assertEqual(result["internal"], 1)
+        self.assertEqual(calls, [("https://www.example.com/doc.pdf", "https://www.example.com/")])
 
 
 if __name__ == "__main__":
