@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import argparse
 import tempfile
 import unittest
 from pathlib import Path
 
 from scripts.replication_agent import (
+    CrawlPolicy,
     CrawlItem,
     DomainPolicy,
     ReplicationAgent,
     ReplicationConfig,
     ResourceItem,
+    load_config,
 )
 
 
@@ -25,6 +28,70 @@ def make_agent() -> ReplicationAgent:
 
 
 class ReplicationAgentTests(unittest.TestCase):
+    def test_load_config_accepts_only_target_url(self) -> None:
+        args = argparse.Namespace(
+            url="https://www.example.com/",
+            config=None,
+            site_id=None,
+            root_domain=None,
+            out_dir=None,
+            max_pages_per_host=None,
+            max_assets_per_host=None,
+            max_depth=None,
+            timeout_seconds=None,
+            port_start=None,
+            force_refresh=False,
+            render_dynamic_pages=False,
+            require_browser_render=False,
+            visual_compare=False,
+            visual_sample_pages=None,
+            no_robots=False,
+            ack_authorized=True,
+        )
+
+        config = load_config(args)
+
+        self.assertEqual(config.target_url, "https://www.example.com/")
+        self.assertEqual(config.site_id, "example.com")
+        self.assertEqual(config.domain_policy.root_domain, "example.com")
+        self.assertIn("www.example.com", config.domain_policy.include)
+        self.assertEqual(config.out_dir.name, "example.com")
+        self.assertEqual(config.crawl_policy.max_pages_per_host, CrawlPolicy.max_pages_per_host)
+        self.assertTrue(config.crawl_policy.render_dynamic_pages)
+        self.assertEqual(config.crawl_policy.worker_count, CrawlPolicy.worker_count)
+        self.assertTrue(config.authorization_policy.require_ack)
+        self.assertTrue(config.authorization_policy.authorized)
+
+    def test_load_config_accepts_minimal_config_file(self) -> None:
+        config_file = Path(tempfile.mkdtemp(prefix="replication_config_test_", dir="/tmp")) / "site.json"
+        config_file.write_text('{"target_url":"https://docs.example.com/"}', encoding="utf-8")
+        args = argparse.Namespace(
+            url=None,
+            config=str(config_file),
+            site_id=None,
+            root_domain=None,
+            out_dir=None,
+            max_pages_per_host=None,
+            max_assets_per_host=None,
+            max_depth=None,
+            timeout_seconds=None,
+            port_start=None,
+            force_refresh=False,
+            render_dynamic_pages=False,
+            require_browser_render=False,
+            visual_compare=False,
+            visual_sample_pages=None,
+            no_robots=False,
+            ack_authorized=True,
+        )
+
+        config = load_config(args)
+
+        self.assertEqual(config.target_url, "https://docs.example.com/")
+        self.assertEqual(config.domain_policy.root_domain, "example.com")
+        self.assertIn("docs.example.com", config.domain_policy.include)
+        self.assertEqual(config.out_dir.name, "example.com")
+
     def test_next_image_effective_asset_url(self) -> None:
         agent = make_agent()
         nested = "https%3A%2F%2Fcdn.example.com%2Fimage.png%3Fw%3D128"

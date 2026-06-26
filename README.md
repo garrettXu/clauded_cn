@@ -6,18 +6,18 @@
 
 ## 一条命令启动完整复刻
 
-准备好配置文件后，直接执行：
+不写配置文件也可以直接执行，用户只需要输入目标地址：
 
 ```bash
 .venv/bin/python scripts/replication_agent.py \
-  --config configs/my_site.json \
+  https://www.example.com/ \
   --ack-authorized \
   --force-refresh
 ```
 
 说明：
 
-- `--config configs/my_site.json`：指定复刻配置。
+- `https://www.example.com/`：必填，目标网站入口地址。
 - `--ack-authorized`：确认你拥有目标网站或已获得授权。
 - `--force-refresh`：首次完整复刻建议使用，会重新建立页面、资源和状态表。
 
@@ -25,7 +25,7 @@
 
 ```bash
 .venv/bin/python scripts/replication_agent.py \
-  --config configs/my_site.json \
+  https://www.example.com/ \
   --ack-authorized
 ```
 
@@ -44,61 +44,70 @@ python3 -m venv .venv
 cp configs/replication_agent.example.json configs/my_site.json
 ```
 
-## 最小配置
+## 配置文件
 
-`configs/my_site.json` 至少需要确认目标站点、域名范围、输出目录和部署目标：
+配置文件不是必须的。需要保存任务时，最小配置只写目标地址：
 
 ```json
 {
-  "site_id": "my_site",
+  "target_url": "https://www.example.com/"
+}
+```
+
+使用配置文件运行：
+
+```bash
+.venv/bin/python scripts/replication_agent.py \
+  --config configs/my_site.json \
+  --ack-authorized \
+  --force-refresh
+```
+
+## 必填和可选配置
+
+必填项只有一个：
+
+- `target_url`：目标网站入口地址。也可以直接作为命令行第一个参数传入。
+
+常用可选项：
+
+```json
+{
   "target_url": "https://www.example.com/",
-  "out_dir": "output/my_site/original",
+  "site_id": "example",
+  "out_dir": "output/example",
   "domain_policy": {
     "root_domain": "example.com",
     "include_subdomains": true,
-    "allowed_hosts": [],
-    "blocked_hosts": []
-  },
-  "crawl_policy": {
-    "max_pages_per_host": 5000,
-    "max_depth": 50,
-    "respect_robots": true,
-    "render_dynamic_pages": true,
-    "worker_count": 3,
-    "request_timeout_ms": 30000,
-    "page_idle_timeout_ms": 8000,
-    "download_videos": true,
-    "download_documents": true
+    "exclude": ["status.example.com"]
   },
   "deployment": {
-    "target_base_domain": "mirror.example.com",
-    "base_root": "/srv/mirror/my_site",
-    "scheme": "https"
-  },
-  "quality_policy": {
-    "max_unresolved_internal_links": 0,
-    "max_missing_resources": 0,
-    "require_visual_pass": false
-  },
-  "visual_policy": {
-    "enabled": true,
-    "sample_pages": 20
-  },
-  "authorization_policy": {
-    "require_ack": true,
-    "authorized": false
+    "target_base_domain": "mirror.example.com"
   }
 }
 ```
 
-关键字段：
+可选项默认值：
 
-- `target_url`：复刻入口，通常填首页。
-- `domain_policy.root_domain`：只处理这个根域名及其子域名。
-- `domain_policy.include_subdomains`：是否复刻二级/多级子域名。
-- `crawl_policy.render_dynamic_pages`：是否用 Playwright 打开页面并等待动态渲染。
-- `deployment.target_base_domain`：部署后的新主域名。
-- `quality_policy`：发布门禁，正式发布建议资源缺失和内部未解析链接都为 0。
+- `site_id`：默认从根域名生成，例如 `example.com`。
+- `out_dir`：默认 `output/<site_id>`，实际复刻产物在 `output/<site_id>/original`。
+- `domain_policy.root_domain`：默认从 `target_url` 自动推导。
+- `domain_policy.include_subdomains`：默认 `true`，会复刻同根域名下子域名。
+- `domain_policy.exclude`：默认空，用于排除不复刻的子域名。
+- `deployment.target_base_domain`：默认空；不部署新域名时不需要填写。
+
+高级配置也都有默认值，只有需要调优时才写：
+
+- `crawl_policy.max_pages_per_host`：默认 `5000`。
+- `crawl_policy.max_depth`：默认 `50`。
+- `crawl_policy.render_dynamic_pages`：默认 `true`。
+- `crawl_policy.worker_count`：默认 `3`。
+- `crawl_policy.timeout_seconds`：默认 `30`。
+- `local_preview.port_start`：默认 `8300`。
+- `visual_policy.enabled`：默认 `false`。
+- `quality_policy.min_page_success_rate`：默认 `0.95`。
+- `quality_policy.min_resource_success_rate`：默认 `0.98`。
+- `authorization_policy.require_ack`：默认 `true`，运行时用 `--ack-authorized` 确认授权。
 
 ## Agent 会自动完成什么
 
@@ -115,10 +124,10 @@ cp configs/replication_agent.example.json configs/my_site.json
 
 ## 输出结果
 
-默认输出在配置的 `out_dir` 下：
+默认输出在 `output/<site_id>/original` 下。如果配置了 `out_dir`，则输出在 `<out_dir>/original` 下：
 
 ```text
-output/my_site/original/
+output/example.com/original/
   manifest.json
   crawl_table.json
   resource_table.json
@@ -145,7 +154,7 @@ output/my_site/original/
 必须先检查质量报告：
 
 ```bash
-python3 -m json.tool output/my_site/original/quality_report.json | sed -n '1,160p'
+python3 -m json.tool output/example.com/original/quality_report.json | sed -n '1,160p'
 ```
 
 只有 `ready_for_release=true` 才建议部署。重点检查：
@@ -163,7 +172,7 @@ python3 -m json.tool output/my_site/original/quality_report.json | sed -n '1,160
 
 ```bash
 .venv/bin/python scripts/serve_replica.py \
-  output/my_site/original \
+  output/example.com/original \
   --localhost \
   --port 8700
 ```
@@ -187,7 +196,7 @@ http://localhost:8700/_mirror/docs.example.com/
 
 ```bash
 .venv/bin/python scripts/serve_replica.py \
-  output/my_site/original/hosts/www.example.com/site \
+  output/example.com/original/hosts/www.example.com/site \
   --port 8700
 ```
 
@@ -200,7 +209,7 @@ http://localhost:8700/
 如果要使用原来的多端口预览，直接传入完整复刻目录，不加 `--localhost`：
 
 ```bash
-.venv/bin/python scripts/serve_replica.py output/my_site/original
+.venv/bin/python scripts/serve_replica.py output/example.com/original
 ```
 
 多端口模式下，每个源 host 使用 `manifest.json` 或 `nginx/local-preview.conf` 中分配的端口分别查看。
@@ -211,11 +220,11 @@ http://localhost:8700/
 
 ```bash
 .venv/bin/python scripts/deploy_static_mirror.py \
-  --mirror-dir output/my_site/original \
+  --mirror-dir output/example.com/original \
   --ssh-host <server-ip> \
   --ssh-user root \
-  --remote-root /srv/mirror/my_site \
-  --remote-nginx-conf /etc/nginx/sites-available/my_site.conf \
+  --remote-root /srv/mirror/example \
+  --remote-nginx-conf /etc/nginx/sites-available/example.conf \
   --enable-nginx-site \
   --reload-nginx
 ```

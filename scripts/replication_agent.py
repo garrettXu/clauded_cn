@@ -118,10 +118,10 @@ class DomainPolicy:
 @dataclasses.dataclass
 class CrawlPolicy:
     respect_robots: bool = True
-    max_pages_per_host: int = 50
-    max_depth: int = 10
+    max_pages_per_host: int = 5000
+    max_depth: int = 50
     rate_limit_per_host: float = 0.4
-    render_dynamic_pages: bool = False
+    render_dynamic_pages: bool = True
     dynamic_render_mode: str = "always"
     require_browser_render: bool = False
     dynamic_wait_ms: int = 1500
@@ -132,14 +132,14 @@ class CrawlPolicy:
     dynamic_timeout_seconds: int = 30
     download_videos: bool = True
     download_documents: bool = True
-    max_asset_size_mb: int = 100
+    max_asset_size_mb: int = 200
     max_assets_per_host: int = 0
     timeout_seconds: int = 30
     revalidate_completed_on_resume: bool = True
     retry_failed_on_resume: bool = True
     terminal_http_statuses: list[int] = dataclasses.field(default_factory=lambda: [404, 410])
     max_attempts_per_page: int = 3
-    worker_count: int = 1
+    worker_count: int = 3
 
 
 @dataclasses.dataclass
@@ -177,7 +177,7 @@ class QualityPolicy:
 
 @dataclasses.dataclass
 class AuthorizationPolicy:
-    require_ack: bool = False
+    require_ack: bool = True
     authorized: bool = False
     statement: str = ""
 
@@ -2972,7 +2972,7 @@ def load_config(args: argparse.Namespace) -> ReplicationConfig:
         or registrable_domain(host)
     )
     site_id = args.site_id or data.get("site_id") or safe_segment(root_domain)
-    out_dir = Path(args.out_dir or data.get("out_dir") or ROOT / "mirror").resolve()
+    out_dir = Path(args.out_dir or data.get("out_dir") or ROOT / "output" / site_id).resolve()
 
     domain_data = data.get("domain_policy", {})
     crawl_data = data.get("crawl_policy", {})
@@ -2994,10 +2994,10 @@ def load_config(args: argparse.Namespace) -> ReplicationConfig:
 
     crawl_policy = CrawlPolicy(
         respect_robots=args.no_robots is False and crawl_data.get("respect_robots", True),
-        max_pages_per_host=args.max_pages_per_host or crawl_data.get("max_pages_per_host", 50),
-        max_depth=args.max_depth if args.max_depth is not None else crawl_data.get("max_depth", 10),
+        max_pages_per_host=args.max_pages_per_host or crawl_data.get("max_pages_per_host", CrawlPolicy.max_pages_per_host),
+        max_depth=args.max_depth if args.max_depth is not None else crawl_data.get("max_depth", CrawlPolicy.max_depth),
         rate_limit_per_host=crawl_data.get("rate_limit_per_host", 0.4),
-        render_dynamic_pages=args.render_dynamic_pages or crawl_data.get("render_dynamic_pages", False),
+        render_dynamic_pages=args.render_dynamic_pages or crawl_data.get("render_dynamic_pages", CrawlPolicy.render_dynamic_pages),
         dynamic_render_mode=crawl_data.get("dynamic_render_mode", "always"),
         require_browser_render=args.require_browser_render or crawl_data.get("require_browser_render", False),
         dynamic_wait_ms=crawl_data.get("dynamic_wait_ms", 1500),
@@ -3008,14 +3008,14 @@ def load_config(args: argparse.Namespace) -> ReplicationConfig:
         dynamic_timeout_seconds=crawl_data.get("dynamic_timeout_seconds", 30),
         download_videos=crawl_data.get("download_videos", True),
         download_documents=crawl_data.get("download_documents", True),
-        max_asset_size_mb=crawl_data.get("max_asset_size_mb", 100),
+        max_asset_size_mb=crawl_data.get("max_asset_size_mb", CrawlPolicy.max_asset_size_mb),
         max_assets_per_host=args.max_assets_per_host if args.max_assets_per_host is not None else crawl_data.get("max_assets_per_host", 0),
         timeout_seconds=args.timeout_seconds if args.timeout_seconds is not None else crawl_data.get("timeout_seconds", 30),
         revalidate_completed_on_resume=crawl_data.get("revalidate_completed_on_resume", True),
         retry_failed_on_resume=crawl_data.get("retry_failed_on_resume", True),
         terminal_http_statuses=[int(item) for item in crawl_data.get("terminal_http_statuses", [404, 410])],
         max_attempts_per_page=int(crawl_data.get("max_attempts_per_page", 3)),
-        worker_count=crawl_data.get("worker_count", 1),
+        worker_count=crawl_data.get("worker_count", CrawlPolicy.worker_count),
     )
     if args.no_robots:
         crawl_policy.respect_robots = False
@@ -3070,7 +3070,7 @@ def load_config(args: argparse.Namespace) -> ReplicationConfig:
             require_visual_pass=quality_data.get("require_visual_pass", False),
         ),
         authorization_policy=AuthorizationPolicy(
-            require_ack=authorization_data.get("require_ack", False),
+            require_ack=authorization_data.get("require_ack", AuthorizationPolicy.require_ack),
             authorized=bool(args.ack_authorized or authorization_data.get("authorized", False)),
             statement=authorization_data.get("statement", ""),
         ),
