@@ -1392,7 +1392,7 @@ class ReplicationAgent:
 
     def write_asset_variants(self, host: str, public_path: str, body: bytes) -> None:
         for variant in ("site", "local_preview"):
-            path = self.host_root(host, variant) / public_path.lstrip("/")
+            path = self.host_root(host, variant) / public_path_file_path(public_path)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(body)
 
@@ -1424,7 +1424,7 @@ class ReplicationAgent:
             self.asset_records.append({"status": "missing_local_static_refs_repaired", "copied": copied})
 
     def find_existing_static_file(self, public_path: str, variant: str, exclude_host: str | None = None) -> Path | None:
-        relative = public_path.lstrip("/")
+        relative = public_path_file_path(public_path)
         for host in sorted(self.hosts):
             if exclude_host and host == exclude_host:
                 continue
@@ -2001,9 +2001,10 @@ class ReplicationAgent:
         return (self.original_dir / item.local_preview_path).exists() and (self.original_dir / item.deploy_path).exists()
 
     def asset_outputs_exist(self, item: ResourceItem) -> bool:
+        relative = public_path_file_path(item.public_path)
         return (
-            (self.host_root(item.host, "local_preview") / item.public_path.lstrip("/")).exists()
-            and (self.host_root(item.host, "site") / item.public_path.lstrip("/")).exists()
+            (self.host_root(item.host, "local_preview") / relative).exists()
+            and (self.host_root(item.host, "site") / relative).exists()
         )
 
     def record_unchanged_page(
@@ -2334,7 +2335,7 @@ class ReplicationAgent:
                 continue
             for ref in self.local_static_refs_in_html(page_path):
                 parsed = urllib.parse.urlparse(ref)
-                target = self.host_root(item.host, "site") / parsed.path.lstrip("/")
+                target = self.host_root(item.host, "site") / public_path_file_path(parsed.path)
                 if not target.exists():
                     issues.append(
                         {
@@ -2834,13 +2835,26 @@ def discover_sitemaps(start_url: str, timeout: int) -> list[str]:
 def page_file_path(path: str) -> Path:
     if not path or path == "/":
         return Path("index.html")
-    clean = path.lstrip("/")
+    clean_path = public_path_file_path(path)
+    clean = clean_path.as_posix()
     suffix = Path(clean).suffix
     if suffix and suffix not in PAGE_EXTENSIONS:
-        return Path(clean)
+        return clean_path
     if suffix in {".html", ".htm"}:
-        return Path(clean)
-    return Path(clean) / "index.html"
+        return clean_path
+    return clean_path / "index.html"
+
+
+def public_path_file_path(public_path: str) -> Path:
+    parsed = urllib.parse.urlparse(public_path)
+    raw_path = parsed.path or public_path
+    if not raw_path.startswith("/"):
+        raw_path = "/" + raw_path
+    decoded = urllib.parse.unquote(raw_path)
+    normalized = posixpath.normpath(decoded)
+    if normalized in {"", "/", "."}:
+        return Path()
+    return Path(normalized.lstrip("/"))
 
 
 def query_static_path(path: str, query: str) -> str:

@@ -15,6 +15,8 @@ from scripts.replication_agent import (
     ReplicationConfig,
     ResourceItem,
     load_config,
+    page_file_path,
+    public_path_file_path,
 )
 
 
@@ -202,6 +204,18 @@ class ReplicationAgentTests(unittest.TestCase):
 
         self.assertEqual(result["internal"], 1)
         self.assertEqual(calls, [("https://www.example.com/doc.pdf", "https://www.example.com/")])
+
+    def test_percent_encoded_public_paths_use_decoded_filesystem_paths(self) -> None:
+        public_path = "/_next/static/chunks/app/docs/%5Blocale%5D/%5B...segments%5D/page.js"
+
+        self.assertEqual(
+            public_path_file_path(public_path).as_posix(),
+            "_next/static/chunks/app/docs/[locale]/[...segments]/page.js",
+        )
+        self.assertEqual(
+            page_file_path("/docs/%5Blocale%5D/page.html").as_posix(),
+            "docs/[locale]/page.html",
+        )
 
 
 if __name__ == "__main__":
