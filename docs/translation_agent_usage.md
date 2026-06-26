@@ -43,14 +43,6 @@ export TRANSLATION_API_KEY="..."
 export TRANSLATION_MODEL="glm-5.1"
 ```
 
-也兼容旧的 Anthropic-compatible 变量：
-
-```bash
-export ANTHROPIC_API_URL="https://api.z.ai/api/anthropic"
-export ANTHROPIC_API_KEY="..."
-export TRANSLATION_MODEL="glm-5.1"
-```
-
 运行：
 
 ```bash
@@ -75,9 +67,9 @@ export TRANSLATION_MODEL="glm-5.1"
 
 示例端口：
 
-- `www.anthropic.com`：`http://localhost:8600`
-- `trust.anthropic.com`：`http://localhost:8601`
-- `status.anthropic.com`：`http://localhost:8602`
+- `www.example.com`：`http://localhost:8600`
+- `docs.example.com`：`http://localhost:8601`
+- `status.example.com`：`http://localhost:8602`
 
 ## 5. 输出报告
 

@@ -69,12 +69,12 @@
 
 示例：
 
-- 入口：`https://www.anthropic.com/`
-- 主域名：`anthropic.com`
-- 需要处理：`www.anthropic.com`
-- 需要处理：`docs.anthropic.com`
-- 需要处理：`support.anthropic.com`
-- 不处理：`claude.ai`
+- 入口：`https://www.example.com/`
+- 主域名：`example.com`
+- 需要处理：`www.example.com`
+- 需要处理：`docs.example.com`
+- 需要处理：`support.example.com`
+- 不处理：`external.example.ai`
 - 不处理：`youtube.com`
 
 说明：这里的“二级域名”按产品语境理解为主域名下的子域名。
@@ -454,8 +454,8 @@ https://docs.example.com/guide/start
 如果同一路径不同 query 返回不同 HTML，启用 query 静态化：
 
 ```text
-/search?q=claude
-→ site/search/__query/q-claude/index.html
+/search?q=agent
+→ site/search/__query/q-agent/index.html
 ```
 
 同时在 Nginx 配置中生成映射规则或在部署声明中标记需要人工确认。

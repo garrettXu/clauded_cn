@@ -331,19 +331,19 @@ segment_id = sha256(page_path + dom_selector + source_text + attr_name)
 翻译时需要保护内联标签：
 
 ```html
-Build with <strong>Claude</strong> and deploy faster.
+Build with <strong>ProductX</strong> and deploy faster.
 ```
 
 发送给模型前转换为占位符：
 
 ```text
-Build with <ph id="1">Claude</ph> and deploy faster.
+Build with <ph id="1">ProductX</ph> and deploy faster.
 ```
 
 模型输出必须保留占位符：
 
 ```text
-使用 <ph id="1">Claude</ph> 更快完成构建和部署。
+使用 <ph id="1">ProductX</ph> 更快完成构建和部署。
 ```
 
 写回时恢复为原标签。若占位符缺失、重复或顺序严重异常，该段进入 `invalid_model_output`，不得强行写回。
@@ -360,8 +360,8 @@ Build with <ph id="1">Claude</ph> and deploy faster.
 
 ```yaml
 locked_terms:
-  Anthropic: Anthropic
-  Claude: Claude
+  ProductX: ProductX
+  ExampleAI: ExampleAI
   API: API
   SDK: SDK
 
@@ -742,8 +742,8 @@ sha256(source_text + source_language + target_language + glossary_version + mode
 
 ```json
 {
-  "source": "Try Claude",
-  "target": "试用 Claude",
+  "source": "Try ProductX",
+  "target": "试用 ProductX",
   "source_language": "en",
   "target_language": "zh-CN",
   "model": "translation-model",

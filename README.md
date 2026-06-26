@@ -32,7 +32,7 @@
 ## 首次安装
 
 ```bash
-cd /Users/elane/Documents/python/clauded_cn
+cd <repo-dir>
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m playwright install chromium
@@ -262,7 +262,3 @@ http://localhost:8700/
 .venv/bin/python -m py_compile scripts/replication_agent.py scripts/deploy_static_mirror.py scripts/serve_replica.py
 .venv/bin/python -m unittest discover -s tests
 ```
-
-## 演示
-
-[clauded.cn](https://clauded.cn/) 是使用本复刻 Agent 生成并部署过的一个静态复刻演示站，只作为效果参考。实际使用时请替换为你拥有或已授权的网站。

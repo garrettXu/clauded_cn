@@ -5,8 +5,8 @@
 小范围验证：
 
 ```bash
-.venv/bin/python scripts/replication_agent.py https://www.anthropic.com/ \
-  --site-id anthropic \
+.venv/bin/python scripts/replication_agent.py https://www.example.com/ \
+  --site-id example \
   --out-dir output/replication_test \
   --max-pages-per-host 3 \
   --max-assets-per-host 50 \

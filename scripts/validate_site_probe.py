@@ -33,7 +33,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = ROOT / "data" / "site_mirror_agent.db"
-OUT_DIR = ROOT / "output" / "anthropic_probe"
+OUT_DIR = ROOT / "output" / "site_probe"
 USER_AGENT = "site-mirror-agent-probe/0.1"
 TRACKING_PARAMS = {"fbclid", "gclid", "igshid", "mc_cid", "mc_eid"}
 TEXT_TAGS = {"title", "h1", "h2", "h3", "p", "a", "button", "span", "li"}
@@ -279,7 +279,7 @@ def suffix_for(url: str, content_type: str) -> str:
     return mapping.get(content_type, ".bin")
 
 
-def anthropic_translation_check(sample: str) -> dict[str, Any]:
+def translation_api_check(sample: str) -> dict[str, Any]:
     base_url = os.getenv("ANTHROPIC_API_URL") or os.getenv("ANTHROPIC_API_url")
     api_key = os.getenv("ANTHROPIC_API_KEY")
     model = os.getenv("TRANSLATION_MODEL", "glm-5.1")
@@ -308,7 +308,7 @@ def anthropic_translation_check(sample: str) -> dict[str, Any]:
     try:
         status, _, body = post_json(endpoint, payload, headers)
         data = json.loads(body.decode("utf-8", errors="replace"))
-        text = extract_anthropic_text(data)
+        text = extract_message_text(data)
         return {"status": "ok", "http_status": status, "model": model, "sample_output": text[:300]}
     except Exception as exc:
         return {"status": "error", "error": type(exc).__name__, "message": str(exc)[:300]}
@@ -376,7 +376,7 @@ def make_test_png(width: int, height: int) -> bytes:
     )
 
 
-def extract_anthropic_text(data: dict[str, Any]) -> str:
+def extract_message_text(data: dict[str, Any]) -> str:
     content = data.get("content", [])
     if isinstance(content, list):
         parts = [item.get("text", "") for item in content if isinstance(item, dict)]
@@ -504,8 +504,8 @@ def main() -> int:
     assets = download_assets(run_id, pages, args.max_assets)
 
     if args.with_models:
-        sample = next((sample for page in pages for sample in page.text_samples), "Introducing Claude")
-        summary["translation_check"] = anthropic_translation_check(sample)
+        sample = next((sample for page in pages for sample in page.text_samples), "Example product overview")
+        summary["translation_check"] = translation_api_check(sample)
         summary["vision_check"] = vision_check()
 
     summary["assets_saved"] = sum(1 for asset in assets if asset["status"] == "saved")

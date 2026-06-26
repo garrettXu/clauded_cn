@@ -64,24 +64,24 @@
 
 示例：
 
-- 起始 URL：`https://www.anthropic.com/`
-- 主域名：`anthropic.com`
-- 允许：`www.anthropic.com`
-- 允许：`docs.anthropic.com`
-- 允许：`support.anthropic.com`
-- 不允许：`claude.ai`
+- 起始 URL：`https://www.example.com/`
+- 主域名：`example.com`
+- 允许：`www.example.com`
+- 允许：`docs.example.com`
+- 允许：`support.example.com`
+- 不允许：`external.example.ai`
 - 不允许：`youtube.com`
 
 配置项：
 
 ```yaml
 domain_policy:
-  root_domain: anthropic.com
+  root_domain: example.com
   include_subdomains: true
   include:
-    - www.anthropic.com
+    - www.example.com
   exclude:
-    - status.anthropic.com
+    - status.example.com
 ```
 
 ### 3.3 页面发现
@@ -181,14 +181,14 @@ assets/images/sha256_xxx.webp
 示例：
 
 ```text
-https://www.anthropic.com/research
+https://www.example.com/research
 → http://localhost:8300/research
 
-https://docs.anthropic.com/guide/start
+https://docs.example.com/guide/start
 → http://localhost:8301/guide/start
 
-https://claude.ai/
-→ https://claude.ai/
+https://external.example.ai/
+→ https://external.example.ai/
 ```
 
 ### 3.7 增量同步
@@ -265,7 +265,7 @@ https://claude.ai/
 翻译模型配置：
 
 ```text
-ANTHROPIC_API_URL=https://api.z.ai/api/anthropic
+TRANSLATION_API_URL=https://example.com/v1
 TRANSLATION_MODEL=glm-5.1
 ```
 
@@ -277,8 +277,8 @@ TRANSLATION_MODEL=glm-5.1
 
 ```yaml
 glossary:
-  Anthropic: Anthropic
-  Claude: Claude
+  ProductX: ProductX
+  ExampleAI: ExampleAI
   API: API
   Agent: 智能体
   Workflow: 工作流
@@ -454,7 +454,7 @@ mirror/zh-CN/
 ## 8. 开发顺序
 
 1. 先开发复刻 Agent。
-2. 用 Anthropic 做 10 页以内验证。
+2. 用已授权的中小型站点做 10 页以内验证。
 3. 确认资源完整性和本地链接通顺。
 4. 再开发翻译 Agent。
 5. 加入翻译缓存和术语表。
@@ -463,7 +463,7 @@ mirror/zh-CN/
 
 ## 9. 关键判断
 
-这次 Anthropic 验证暴露的问题正好说明拆分是必要的：
+早期验证暴露的问题说明拆分是必要的：
 
 - 样式丢失属于复刻 Agent 的资源本地化问题。
 - 没有目标语言内容属于翻译 Agent 的翻译产物问题。
